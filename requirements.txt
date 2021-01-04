@@ -1,0 +1,11 @@
+python==3.7.4
+cudatoolkit==10.0.130
+matplotlib==3.1.0
+numpy==1.16.4
+scikit-learn==0.21.2
+scipy==1.5.2
+pytorch==1.2.0
+torchvision==0.4.0
+pandas==0.25.3
+xarray==0.15.0
+h5py

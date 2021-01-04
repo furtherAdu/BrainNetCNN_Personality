@@ -1,0 +1,7 @@
+!input_data/subject_info
+/input_data/*
+/figures/*
+/models/*
+/personality-types/*
+*.pyc
+**__pycache__/
