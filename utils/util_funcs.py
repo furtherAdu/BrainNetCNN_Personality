@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import os
 import random
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -11,6 +12,8 @@ from scipy.linalg import logm, inv
 from sklearn.model_selection import KFold
 
 from utils.util_args import seed, set_names, performance_dir, decimals, input_dir, sub_info_dir
+
+warnings.filterwarnings("ignore", message='Mean of empty slice')
 
 
 def namestr(obj, namespace):
@@ -379,25 +382,34 @@ def performance_to_csv(performance_csv, models=None):
             for part in partitions:
                 # creating dict of necessary performance info, keys should be in headers
                 results_dict = dict(rundate=performance.rundate, input_data=matrix_labels, model=model,
-                                    outcomes=outcomes, transforms=performance.transformations, set=part)
+                                    outcomes=outcomes, transforms=performance.transformations, set=part,
+                                    n_folds=str(int(performance.n_folds)))
 
                 for metric in list(performance.metrics.values):
+                    if (~np.isnan(performance.loc[dict(metrics=metric)].values)).sum():
+                        if model == 'BNCNN':
+                            results_dict.update({'best_test_epochs': best_test_epochs,
+                                                 'best_mean_test_epoch': best_mean_test_epoch})
+                            entry = [
+                                performance.loc[dict(metrics=metric, cv_fold=folds[i], epoch=best, set=part)].values
+                                for i, best in enumerate(best_test_epochs)]
+                            mean_entry = np.nanmean(np.array(entry).reshape(-1, len(performance.outcome)), axis=0)
 
-                    if model == 'BNCNN':
-                        results_dict.update({'best_test_epochs': best_test_epochs,
-                                             'best_mean_test_epoch': best_mean_test_epoch})
-                        entry = [performance.loc[dict(metrics=metric, cv_fold=folds[i], epoch=best, set=part)].values
-                                 for i, best in enumerate(best_test_epochs)]
-                    else:
-                        entry = [performance.loc[dict(metrics=metric, cv_fold=fold)].values
-                                 for fold in range(performance.n_folds)]
+                        else:
+                            if 'outcome' in performance.coords:
+                                xr_entry = performance.loc[dict(metrics=metric, cv_fold=range(performance.n_folds))]
+                                entry = xr_entry.values
+                                mean_entry = xr_entry.mean(dim='cv_fold', skipna=True).values
+                            else:
+                                entry = performance.loc[dict(metrics=metric, cv_fold=range(performance.n_folds))].values
+                                mean_entry = np.nanmean(entry)
 
-                    mean_entry = np.nanmean(entry)
-                    results_dict.update({metric: np.array(entry).squeeze().round(decimals),
-                                         f'mean_{metric}': mean_entry.squeeze().round(decimals)})
+                        results_dict.update({metric: np.array(entry).squeeze().round(decimals),
+                                             f'mean_{metric}': mean_entry.squeeze().round(decimals)})
 
                 results_df = results_df.append(results_dict, ignore_index=True)  # appending single run to dataframe
 
+    results_df.dropna(axis=1, how='all', inplace=True)  # remove empty columns
     results_df.to_csv(performance_csv)
 
 
