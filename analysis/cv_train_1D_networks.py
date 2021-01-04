@@ -25,6 +25,8 @@ def main(args):
     def train_SVM(trainx, trainy, testx=None, testy=None, results=None):
         print('\nTraining SVM...')
 
+        outcome = Y.outcome_names[0]
+
         if Y.multiclass:
             net = svm.SVC(kernel='linear', gamma='scale', verbose=params.verbose, random_state=seed,
                           class_weight='balanced')  # default reg. param C = 1.0
@@ -33,18 +35,19 @@ def main(args):
             trainp = net.predict(trainx)
             t_bacc = balanced_accuracy_score(testy, testp)
 
-            results['test_balanced_accuracy'].append(t_bacc)
+            results['test_balanced_accuracy'][outcome].append(t_bacc)
 
         else:
             net = svm.SVR(kernel='linear', gamma='scale', verbose=params.verbose)
             net.fit(trainx, trainy)
             testp = net.predict(testx)
             trainp = net.predict(trainx)
+
             t_r2 = r2_score(testy, testp)
             t_mae = mean_absolute_error(testy, testp)
 
-            results['test_r2'].append(t_r2)
-            results['test_mean_absolute_error'].append(t_mae)
+            results['test_r2_sklearn'][outcome].append(t_r2)
+            results['test_mean_absolute_error'][outcome].append(t_mae)
 
         best_output = [trainp, trainy, testp, testy]
         output_names = ['trainp', 'trainy', 'testp', 'testy']
@@ -54,6 +57,8 @@ def main(args):
     def train_FC90net(trainx, trainy, testx=None, testy=None, results=None):
         print('\nTraining FC90Net...')
 
+        FC90_kwargs = dict(max_iter=500, solver='sgd', learning_rate='adaptive', momentum=params.momentum,
+                           activation='relu', verbose=params.verbose, early_stopping=False, random_state=seed)
         if Y.multioutcome:
             fl = Y.n_outcomes
         elif Y.multiclass:
@@ -62,44 +67,35 @@ def main(args):
             fl = 1
 
         if Y.multiclass:
-            hl_sizes = (3, fl)
-            net = neural_network.MLPClassifier(hidden_layer_sizes=hl_sizes,
-                                               max_iter=500,
-                                               solver='sgd',
-                                               learning_rate='adaptive',
-                                               momentum=params.momentum,
-                                               activation='relu',
-                                               verbose=params.verbose,
-                                               early_stopping=False,
-                                               random_state=seed)
+            outcome = Y.outcome_names[0]
+            hl_sizes = (5, 6, 7, fl)
+            net = neural_network.MLPClassifier(hidden_layer_sizes=hl_sizes, **FC90_kwargs)
 
             net.fit(trainx, trainy)
             testp = net.predict(testx)
             trainp = net.predict(trainx)
             t_bacc = balanced_accuracy_score(testy, testp)
 
-            results['test_balanced_accuracy'].append(t_bacc)
+            results['test_balanced_accuracy'][outcome].append(t_bacc)
 
         else:
-            hl_sizes = (9,)
-            net = neural_network.MLPRegressor(hidden_layer_sizes=hl_sizes,
-                                              max_iter=500,
-                                              solver='sgd',
-                                              learning_rate='adaptive',
-                                              momentum=params.momentum,
-                                              activation='relu',
-                                              verbose=params.verbose,
-                                              early_stopping=False,
-                                              random_state=seed)
+            hl_sizes = (5, 6, 7,)
+            net = neural_network.MLPRegressor(hidden_layer_sizes=hl_sizes, **FC90_kwargs)
 
             net.fit(trainx, trainy)
             testp = net.predict(testx)
             trainp = net.predict(trainx)
-            t_r2 = r2_score(testy, testp)
-            t_mae = mean_absolute_error(testy, testp)
 
-            results['test_r2'].append(t_r2)
-            results['test_mean_absolute_error'].append(t_mae)
+            for i, outcome in enumerate(Y.outcome_names):
+                if Y.multioutcome:
+                    t_r2 = r2_score(testy[:, i], testp[:, i])
+                    t_mae = mean_absolute_error(testy[:, i], testp[:, i])
+                else:
+                    t_r2 = r2_score(testy, testp)
+                    t_mae = mean_absolute_error(testy, testp)
+
+                results['test_r2_sklearn'][outcome].append(t_r2)
+                results['test_mean_absolute_error'][outcome].append(t_mae)
 
         best_output = [trainp, trainy, testp, testy]
         output_names = ['trainp', 'trainy', 'testp', 'testy']
@@ -110,24 +106,26 @@ def main(args):
         print('\nTraining ElasticNet...')
 
         if Y.multiclass:
-            net = SGDClassifier(penalty='elasticnet', l1_ratio=.5,  # logistic regression with even L1/L2 penalty
-                                random_state=seed)
+            net = SGDClassifier(penalty='elasticnet', l1_ratio=.5, random_state=seed)
             net.fit(trainx, trainy)
             testp = net.predict(testx)
             t_bacc = balanced_accuracy_score(testy, testp)
 
-            results['test_balanced_accuracy'].append(t_bacc)
+            outcome = Y.outcome_names[0]
+            results['test_balanced_accuracy'][outcome].append(t_bacc)
 
         elif Y.multioutcome:
             net = MultiTaskElasticNet(random_state=seed)
             net.fit(trainx, trainy)
             testp = net.predict(testx)
             trainp = net.predict(trainx)
-            t_r2 = r2_score(testy, testp)
-            t_mae = mean_absolute_error(testy, testp)
 
-            results['test_r2'].append(t_r2)
-            results['test_mean_absolute_error'].append(t_mae)
+            for i, outcome in enumerate(Y.outcome_names):
+                t_r2 = r2_score(testy[:, i], testp[:, i])
+                t_mae = mean_absolute_error(testy[:, i], testp[:, i])
+
+                results['test_r2_sklearn'][outcome].append(t_r2)
+                results['test_mean_absolute_error'][outcome].append(t_mae)
 
         else:
             net = ElasticNet(random_state=seed)
@@ -137,8 +135,9 @@ def main(args):
             t_r2 = r2_score(testy, testp)
             t_mae = mean_absolute_error(testy, testp)
 
-            results['test_r2'].append(t_r2)
-            results['test_mean_absolute_error'].append(t_mae)
+            outcome = Y.outcome_names[0]
+            results['test_r2_sklearn'][outcome].append(t_r2)
+            results['test_mean_absolute_error'][outcome].append(t_mae)
 
         best_output = [trainp, trainy, testp, testy]
         output_names = ['trainp', 'trainy', 'testp', 'testy']
@@ -159,7 +158,9 @@ def main(args):
 
         features_keys = ['features_used']
         all_keys = scoring + features_keys
-        cv_results = dict(zip(all_keys, [[] for _ in range(len(all_keys))]))
+        cv_results = dict(zip(all_keys,
+                              [dict(zip(Y.outcome_names, [[] for _ in range(Y.n_outcomes)]))
+                               for _ in range(len(all_keys))]))  # nested dict
 
         for fold in range(n_folds):
 
@@ -190,7 +191,9 @@ def main(args):
             X_train = X_train[:, features_to_use]
             X_test = X_test[:, features_to_use]
             Y_train = Y_train.squeeze()
-            cv_results['features_used'].append(np.argwhere(features_to_use).squeeze().tolist())
+
+            for outcome in Y.outcome_names:
+                cv_results['features_used'][outcome].append(np.argwhere(features_to_use).squeeze().tolist())
 
             cv_results, net, best_output, output_names = train_func(trainx=X_train,
                                                                     trainy=Y_train,
@@ -224,15 +227,24 @@ def main(args):
         net_preamble = '_'.join([model_name, rundate])
 
         # separating info into dictionaries
-        scoring_dict = {k: v for k, v in cv_results.items() if v and k in scoring}
-        assert scoring_dict, 'results must have some keys in scoring'
-        non_scoring_dict = {k: v for k, v in cv_results.items() if v and k not in scoring}
+        scoring_dict = {k: v for k, v in cv_results.items() if v[list(v.keys())[0]] and k in scoring}
+        non_scoring_dict = {k: v for k, v in cv_results.items() if v[list(v.keys())[0]] and k not in scoring}
+        metrics = list(scoring_dict.keys())
+        outcome_names = list(scoring_dict[metrics[0]].keys())
 
-        metrics = list(scoring_dict.keys())  # performance metrics keys
-        results_data = np.array(list(scoring_dict.values()))  # performance metrics data
+        results_data = np.array([[scoring_dict[metric][outcome]
+                                  for outcome in outcome_names] for metric in metrics]).squeeze()
 
-        performance = xr.DataArray(results_data, coords=[metrics, range(n_folds)],
-                                   dims=['metrics', 'cv_fold'], name=net_preamble)
+        if Y.multioutcome:
+            performance = xr.DataArray(results_data,
+                                       coords=[metrics, outcome_names, range(n_folds)],
+                                       dims=['metrics', 'outcome', 'cv_fold'],
+                                       name=net_preamble)
+        else:
+            performance = xr.DataArray(results_data,
+                                       coords=[metrics, range(n_folds)],
+                                       dims=['metrics', 'cv_fold'],
+                                       name=net_preamble)
 
         performance = performance.assign_attrs(training_params)
 
@@ -242,6 +254,7 @@ def main(args):
             ensure_subfolder_in_folder(os.path.join(performance_dir, params.model[0]), 'features_used')
             pickle.dump(non_scoring_dict, open(os.path.join(performance_path, 'features_used',
                                                             net_preamble + '_features_used.pkl'), "wb"))
+        return metrics
 
     ensure_subfolder_in_folder(folder=performance_dir, subfolder=params.model[0])
 
@@ -258,11 +271,17 @@ def main(args):
 
     # # printing results
     np.set_printoptions(precision=decimals)
+    metrics = [k for k, v in cv_results.items() if v[list(v.keys())[0]] and k in scoring]
+
     print(f'\nResults, {params.model[0]} prediction of {params.outcome_names} from {params.matrix_labels}'
           f' over {params.n_folds} cross-validated folds:\n')
-    for key, value in list(cv_results.items()):
-        if value and key in scoring:
-            print(f'{key}: {cv_results[key]}')
+
+    for outcome in Y.outcome_names:
+        print(f'\n{outcome}')
+        for key in metrics:
+            if cv_results[key] and key in scoring:
+                outcome_result = np.array(cv_results[key][outcome])
+                print(f'{key}: {outcome_result}')
 
 
 if __name__ == '__main__':
